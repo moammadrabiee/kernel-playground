@@ -1,60 +1,42 @@
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/types.h>
-#include <linux/skbuff.h>
 #include <linux/kernel.h>
-
 #include <linux/netfilter.h>
-#include <linux/netfilter_arp.h>
-
-#include <linux/if_arp.h>
-#include <linux/if_ether.h>
-
+#include <linux/netfilter_ipv6.h>
+#include <linux/ipv6.h>
+#include <linux/icmpv6.h>
 #include <net/netns/generic.h>
 
 static unsigned int lkm_net_id;
-
-static unsigned int arp_requests = 0;
-static unsigned int arp_replies = 0;
 
 struct lkm_netns_data {
 	struct nf_hook_ops nf_hops;
 };
 
 static unsigned int nf_callback(void *priv, struct sk_buff *skb,
-                                const struct nf_hook_state *state)
+				const struct nf_hook_state *state)
 {
-    struct arphdr *arph;
+	struct ipv6hdr *ip6h;
 
-    if (!skb)
-        return NF_ACCEPT;
+	if (!skb || !pskb_may_pull(skb, sizeof(*ip6h))) {
+		printk("weird skb?! Drop it!\n");
+		return NF_DROP;
+	}
 
-    arph = arp_hdr(skb);
+	ip6h = ipv6_hdr(skb);
+	if (ip6h->nexthdr == IPPROTO_ICMPV6) {
+		printk("recevied ICMPv6 packet! Drop it!\n");
+		return NF_DROP;
+	}
 
-    if (!arph)
-        return NF_ACCEPT;
-
-
-    if (arph->ar_op == htons(ARPOP_REQUEST)) {
-        arp_requests++;
-        printk(KERN_INFO "ARP Request received (total=%u)\n",
-               arp_requests);
-    }
-    else if (arph->ar_op == htons(ARPOP_REPLY)) {
-        arp_replies++;
-        printk(KERN_INFO "ARP Reply received (total=%u)\n",
-               arp_replies);
-    }
-
-    return NF_ACCEPT;
+	return NF_ACCEPT;
 }
 
-
 static const struct nf_hook_ops lkm_nf_hook_ops_template = {
-	.hook		= nf_callback,
-	.hooknum	= NF_ARP_IN,
-	.pf		= NFPROTO_ARP,
-	.priority       = 0,
+	.hook		= nf_callback,		/* hook function */
+	.hooknum	= NF_INET_PRE_ROUTING,	/* received packets */
+	.pf		= PF_INET6,		/* IPv6 */
+	.priority 	= NF_IP6_PRI_FIRST,	/* max hook priority */
 };
 
 static struct nf_hook_ops *lkm_nf_hook_ops(struct net *net)
@@ -128,5 +110,5 @@ module_exit(lkm_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Andrea Mayer");
-MODULE_DESCRIPTION("Simple Linux kernel Netfilter Module for counting ARP requests and replies");
+MODULE_DESCRIPTION("Simple Linux kernel Netfilter Module for dropping ICMPv6 ingress packets");
 MODULE_VERSION("1.0.0");
