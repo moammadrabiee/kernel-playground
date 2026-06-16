@@ -142,3 +142,4 @@ Through this project, I learned:
 ## Conclusion
 
 The Basic ARP Traffic Inspector was successfully implemented, tested, and demonstrated. The module monitors ARP traffic by counting requests and replies while allowing packets to continue through the network stack.
+
