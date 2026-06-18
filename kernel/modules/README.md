@@ -1,15 +1,12 @@
 # M8 – ARP Traffic Inspector (Basic Level)
 
-## Overview
+## Project Description
 
 This project implements the **ARP Traffic Inspector** assignment using a Linux Kernel Module based on the Netfilter framework.
 
-The implementation is derived from the Netfilter example provided in the *kernel-playground* repository. The original example inspected ICMPv6 traffic, while this version has been modified to inspect ARP traffic and count both:
+The original example provided in the kernel-playground repository inspected ICMPv6 traffic. The implementation was modified to inspect ARP traffic instead and count both ARP Requests and ARP Replies.
 
-* ARP Requests
-* ARP Replies
-
-The module does not modify, block, or drop packets. All packets are accepted and continue through the Linux networking stack normally.
+The module performs passive monitoring only. All packets are accepted and continue through the Linux networking stack without being modified or blocked.
 
 ---
 
@@ -19,93 +16,54 @@ The objectives of this project are:
 
 * Understand Linux Kernel Module development.
 * Learn how Netfilter hooks work inside the Linux kernel.
-* Inspect ARP packets at kernel level.
+* Inspect ARP traffic at kernel level.
 * Count ARP Requests and ARP Replies.
-* Validate packet inspection through practical experiments.
+* Perform testing and validation through reproducible experiments.
+
+---
+
+## Design Choices
+
+The following modifications were made to the original Netfilter example:
+
+* Removed the IPv6 and ICMPv6 specific logic.
+* Added ARP packet parsing using `arp_hdr()`.
+* Added counters for ARP Requests and ARP Replies.
+* Registered two Netfilter hooks:
+
+  * `NF_ARP_OUT` for outgoing ARP packets (typically Requests).
+  * `NF_ARP_IN` for incoming ARP packets (typically Replies).
+* Kept `NF_ACCEPT` as the return value so packets are never blocked.
+
+Using two hooks allows the module to observe both directions of ARP traffic during the same execution.
 
 ---
 
 ## Implementation Details
 
-### Netfilter Hooks
+The module inspects ARP packets through a Netfilter callback function.
 
-The module registers two Netfilter hooks:
+For each packet:
 
-```c
-NF_ARP_OUT
-```
+1. The ARP header is extracted using `arp_hdr(skb)`.
+2. The ARP operation field (`ar_op`) is checked.
+3. The corresponding counter is updated.
+4. A message is printed to the kernel log using `printk()`.
 
-Used to inspect outgoing ARP packets (typically ARP Requests).
+The following packet types are detected:
 
-```c
-NF_ARP_IN
-```
-
-Used to inspect incoming ARP packets (typically ARP Replies).
-
-Using both hooks allows the module to count ARP Requests and ARP Replies during the same execution.
-
-### Packet Processing
-
-For every ARP packet:
-
-1. The packet is accessed through the `sk_buff` structure.
-2. The ARP header is extracted using:
-
-```c
-arp_hdr(skb);
-```
-
-3. The ARP operation field (`ar_op`) is checked.
-4. The corresponding counter is updated.
-
-### Packet Types Detected
-
-#### ARP Request
-
-```c
-ARPOP_REQUEST
-```
-
-#### ARP Reply
-
-```c
-ARPOP_REPLY
-```
-
-### Counters
+* `ARPOP_REQUEST`
+* `ARPOP_REPLY`
 
 The module maintains two independent counters:
 
-```c
-arp_requests
-arp_replies
-```
+* `arp_requests`
+* `arp_replies`
 
-### Packet Forwarding
-
-The callback always returns:
+All packets are accepted by returning:
 
 ```c
-NF_ACCEPT
-```
-
-Therefore, packets are inspected but never blocked or modified.
-
----
-
-## Source Files
-
-Main implementation:
-
-```text
-kernel/modules/snf_lkm.c
-```
-
-Compiled module:
-
-```text
-kernel/modules/snf_lkm.ko
+return NF_ACCEPT;
 ```
 
 ---
@@ -125,9 +83,15 @@ make clean
 make
 ```
 
+Successful compilation produces:
+
+```text
+snf_lkm.ko
+```
+
 ---
 
-## Running the Experiment
+## Experiment Reproduction
 
 ### 1. Load the Module
 
@@ -166,9 +130,9 @@ ping -c 1 8.8.8.8
 
 ---
 
-### 3. Observe the Results
+### 3. Observe ARP Activity
 
-Display ARP-related logs:
+Display ARP-related kernel messages:
 
 ```bash
 sudo dmesg | grep ARP
@@ -183,7 +147,7 @@ ARP Reply received (total=1)
 
 ---
 
-### 4. Unload the Module
+### 4. Remove the Module
 
 ```bash
 sudo rmmod snf_lkm
@@ -208,52 +172,81 @@ lkm netfilter module unregistered
 
 The module successfully detected and counted both ARP Requests and ARP Replies.
 
-During testing:
+Observed output during testing:
 
 ```text
 ARP Request received (total=1)
 ARP Reply received (total=1)
 ```
 
-This confirms that both Netfilter hooks are functioning correctly.
+This confirms that:
+
+* The outgoing ARP hook is functioning correctly.
+* The incoming ARP hook is functioning correctly.
+* Both packet types are correctly identified and counted.
 
 ---
 
-## Screenshots
+## Experimental Evidence
 
-The repository includes the following screenshots:
+### 1. Module Compilation
 
-1. Module compilation (`build.png`)
-2. Module loading (`module_loaded.png`)
-3. Traffic generation (`generate_traffic.png`)
-4. ARP detection (`arp_detected.png`)
-5. Module removal (`module_removed.png`)
+The module was successfully compiled.
+
+![Build](Screenshot/build.png)
+
+### 2. Module Loading
+
+The module was loaded successfully and both ARP hooks were registered.
+
+![Module Loading](Screenshot/module_loaded.png)
+
+### 3. Traffic Generation
+
+ARP traffic was generated by clearing the ARP cache and sending network traffic.
+
+![Traffic Generation](Screenshot/generate_traffic.png)
+
+### 4. ARP Detection
+
+The module successfully detected and counted both ARP Requests and ARP Replies.
+
+![ARP Detection](Screenshot/arp_detected.png)
+
+### 5. Module Removal
+
+The module was unloaded successfully and both hooks were unregistered.
+
+![Module Removal](Screenshot/Module%20Removal.png)
 
 ---
 
-## Design Choices
+## Source Files
 
-The following design decisions were made:
+Main source file:
 
-* Reused the official Netfilter example provided in the course repository.
-* Replaced ICMPv6 packet inspection with ARP packet inspection.
-* Used two Netfilter hooks (`NF_ARP_IN` and `NF_ARP_OUT`) to observe both directions of ARP traffic.
-* Extracted ARP headers using `arp_hdr()`.
-* Maintained separate counters for Requests and Replies.
-* Returned `NF_ACCEPT` for every packet to ensure non-intrusive monitoring.
+```text
+kernel/modules/snf_lkm.c
+```
+
+Compiled module:
+
+```text
+kernel/modules/snf_lkm.ko
+```
 
 ---
 
 ## Conclusion
 
-This project demonstrates how Linux Kernel Modules can be combined with Netfilter hooks to inspect network traffic at kernel level.
+This project demonstrates how Linux Kernel Modules can be combined with Netfilter hooks to inspect ARP traffic inside the Linux kernel.
 
 Through this implementation, I gained practical experience with:
 
 * Linux kernel programming
 * Netfilter packet processing
 * ARP protocol inspection
-* Kernel logging with `printk`
-* Building and testing custom kernel modules
+* Kernel logging using printk()
+* Building, loading, testing, and removing custom kernel modules
 
 The final implementation successfully fulfills the requirements of the **ARP Traffic Inspector** assignment by counting both ARP Requests and ARP Replies without interfering with normal network operation.
