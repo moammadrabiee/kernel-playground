@@ -18,7 +18,8 @@ static unsigned int arp_requests = 0;
 static unsigned int arp_replies = 0;
 
 struct lkm_netns_data {
-	struct nf_hook_ops nf_hops;
+	struct nf_hook_ops nf_hops_in;
+	struct nf_hook_ops nf_hops_out;
 };
 
 static unsigned int nf_callback(void *priv, struct sk_buff *skb,
@@ -49,50 +50,58 @@ static unsigned int nf_callback(void *priv, struct sk_buff *skb,
     return NF_ACCEPT;
 }
 
-
-static const struct nf_hook_ops lkm_nf_hook_ops_template = {
+static const struct nf_hook_ops lkm_nf_hook_ops_in_template = {
 	.hook		= nf_callback,
-	.hooknum 	= NF_ARP_OUT,
+	.hooknum	= NF_ARP_IN,
 	.pf		= NFPROTO_ARP,
-	.priority       = 0,
+	.priority	= 0,
 };
 
-static struct nf_hook_ops *lkm_nf_hook_ops(struct net *net)
-{
-	struct lkm_netns_data *netns_data = net_generic(net, lkm_net_id);
-
-	return &netns_data->nf_hops;
-}
+static const struct nf_hook_ops lkm_nf_hook_ops_out_template = {
+	.hook		= nf_callback,
+	.hooknum	= NF_ARP_OUT,
+	.pf		= NFPROTO_ARP,
+	.priority	= 0,
+};
 
 static int __net_init netns_init(struct net *net)
 {
-	struct nf_hook_ops *ops = lkm_nf_hook_ops(net);
+	struct lkm_netns_data *netns_data = net_generic(net, lkm_net_id);
 	int rc;
 
-	/* Technically, it isn't necessary because we can use the
-	 * lkm_nf_hook_ops_template directly. However, we demonstrate how to
-	 * allocate storage for each network namespace and initialize it,
-	 * primarily for documentation purposes.
-	 */
-	memcpy(ops, &lkm_nf_hook_ops_template, sizeof(*ops));
+	memcpy(&netns_data->nf_hops_in,
+	       &lkm_nf_hook_ops_in_template,
+	       sizeof(netns_data->nf_hops_in));
 
-	rc = nf_register_net_hook(net, ops);
+	memcpy(&netns_data->nf_hops_out,
+	       &lkm_nf_hook_ops_out_template,
+	       sizeof(netns_data->nf_hops_out));
+
+	rc = nf_register_net_hook(net, &netns_data->nf_hops_in);
 	if (rc) {
-		printk("cannot register netfilter hook\n");
+		printk(KERN_ERR "cannot register ARP IN hook\n");
 		return rc;
 	}
 
-	printk("netfilter hook registered\n");
+	rc = nf_register_net_hook(net, &netns_data->nf_hops_out);
+	if (rc) {
+		nf_unregister_net_hook(net, &netns_data->nf_hops_in);
+		printk(KERN_ERR "cannot register ARP OUT hook\n");
+		return rc;
+	}
+
+	printk(KERN_INFO "ARP IN and OUT hooks registered\n");
 	return 0;
 }
 
 static void __net_exit netns_exit(struct net *net)
 {
-	struct nf_hook_ops *ops = lkm_nf_hook_ops(net);
+	struct lkm_netns_data *netns_data = net_generic(net, lkm_net_id);
 
-	nf_unregister_net_hook(net, ops);
+	nf_unregister_net_hook(net, &netns_data->nf_hops_in);
+	nf_unregister_net_hook(net, &netns_data->nf_hops_out);
 
-	printk("netfilter hook unregistered\n");
+	printk(KERN_INFO "ARP IN and OUT hooks unregistered\n");
 }
 
 static struct pernet_operations lkm_netns_ops = {
