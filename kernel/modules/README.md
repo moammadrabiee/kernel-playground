@@ -217,7 +217,7 @@ The module successfully detected and counted both ARP Requests and ARP Replies.
 
 The module was unloaded successfully and both hooks were unregistered.
 
-![Module Removal](Screenshot/Module%20Removal.png)
+![Module Removal](Screenshot/module_removed.png)
 
 ---
 
