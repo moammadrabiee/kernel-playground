@@ -52,7 +52,7 @@ static unsigned int nf_callback(void *priv, struct sk_buff *skb,
 
 static const struct nf_hook_ops lkm_nf_hook_ops_template = {
 	.hook		= nf_callback,
-	.hooknum	= NF_ARP_IN,
+	.hooknum 	= NF_ARP_OUT,
 	.pf		= NFPROTO_ARP,
 	.priority       = 0,
 };
@@ -127,6 +127,7 @@ module_init(lkm_init);
 module_exit(lkm_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Andrea Mayer");
+MODULE_AUTHOR("Mohammad Rabiee");
 MODULE_DESCRIPTION("Simple Linux kernel Netfilter Module for counting ARP requests and replies");
 MODULE_VERSION("1.0.0");
+
